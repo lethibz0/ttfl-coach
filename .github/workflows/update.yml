@@ -27,8 +27,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -41,7 +41,7 @@ jobs:
         run: |
           git config user.name "ttfl-bot"
           git config user.email "ttfl-bot@users.noreply.github.com"
-          git add data/raw data/*.parquet site/data.json
+          git add -A data/raw data/box.parquet data/games.parquet data/odds.parquet site/data.json
           git diff --cached --quiet || git commit -m "Mise à jour des projections" && git push
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
