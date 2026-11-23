@@ -1,0 +1,6 @@
+__pycache__/
+.venv/
+data/features.parquet
+data/backfill.log
+data/strategy_log.csv
+data/models.pkl

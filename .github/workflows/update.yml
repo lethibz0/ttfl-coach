@@ -1,0 +1,51 @@
+name: Projections TTFL
+
+on:
+  schedule:
+    # heures UTC : 11h, 15h, 18h, 21h, 22h30 et 23h30 (soit 12h à 0h30 à Paris en hiver)
+    - cron: "0 11 * * *"
+    - cron: "0 15 * * *"
+    - cron: "0 18 * * *"
+    - cron: "0 21 * * *"
+    - cron: "30 22 * * *"
+    - cron: "30 23 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ttfl
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Mise à jour des données et réentraînement
+        run: python fetch.py && python model.py --no-backtest
+      - name: Projections du soir
+        run: python predict.py
+      - name: Sauvegarde des données
+        run: |
+          git config user.name "ttfl-bot"
+          git config user.email "ttfl-bot@users.noreply.github.com"
+          git add data/raw data/*.parquet site/data.json
+          git diff --cached --quiet || git commit -m "Mise à jour des projections" && git push
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#0f1720">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>TTFL Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Mise en page : feuille de scouting — une colonne de fiches joueurs, chiffres en condensé façon tableau d'affichage */
+:root {
+  --bg: #f3f5f7; --surface: #ffffff; --line: #dfe4ea; --fg: #14202c; --muted: #5d6b79;
+  --accent: #d9601a; --accent-soft: #fbe9de; --good: #1f8a5b; --good-soft: #e1f3ea;
+  --warn: #b7791f; --warn-soft: #fbf1dc; --bad: #c0392b; --bad-soft: #f9e3e0;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1720; --surface: #17222e; --line: #26344250; --fg: #e8edf2; --muted: #8d9bab;
+  --accent: #f0813f; --accent-soft: #3a2416; --good: #4cc38a; --good-soft: #15302a;
+  --warn: #e0a84a; --warn-soft: #33291a; --bad: #ef6b5e; --bad-soft: #3a1d1b; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1720; --surface: #17222e; --line: #26344250; --fg: #e8edf2; --muted: #8d9bab;
+  --accent: #f0813f; --accent-soft: #3a2416; --good: #4cc38a; --good-soft: #15302a;
+  --warn: #e0a84a; --warn-soft: #33291a; --bad: #ef6b5e; --bad-soft: #3a1d1b; color-scheme: dark; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--body); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 640px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px 96px; }
+[hidden] { display: none !important; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-family: var(--display); font-variant-numeric: tabular-nums; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px 8px; display: grid; gap: 8px; }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.brand h1 { font: 700 26px/1 var(--display); letter-spacing: .02em; margin: 0; text-transform: uppercase; }
+.brand h1 span { color: var(--accent); }
+.meta { color: var(--muted); font-size: 12px; text-align: right; }
+.tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.tabs button { flex: 1; border: 0; background: none; padding: 8px 4px; border-radius: 7px; font-weight: 600; font-size: 13px; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); }
+
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-block: 10px; }
+.toolbar input[type=search] { flex: 1 1 160px; min-width: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 11px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.chip[aria-pressed="true"] { border-color: var(--fg); color: var(--fg); }
+
+.games { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+.game { flex: 0 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; font-size: 12px; }
+.game b { font: 600 15px var(--display); letter-spacing: .02em; }
+.game small { color: var(--muted); display: block; }
+
+.list { display: grid; gap: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 10px; align-items: start; }
+.card.blocked { opacity: .45; }
+.card.pick { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.rank { font: 600 18px/1.3 var(--display); color: var(--muted); text-align: center; }
+.who { min-width: 0; }
+.who .name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .match { color: var(--muted); font-size: 12px; }
+.score { text-align: right; }
+.score .proj { font: 700 30px/1 var(--display); }
+.score .range { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { grid-column: 2 / 4; height: 6px; background: var(--line); border-radius: 3px; position: relative; margin-top: 4px; }
+.bar i { position: absolute; top: 0; bottom: 0; background: var(--accent-soft); border-radius: 3px; }
+.bar b { position: absolute; top: -3px; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+.tags { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 5px; background: var(--bg); color: var(--muted); }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.tag.acc { background: var(--accent-soft); color: var(--accent); }
+
+.detail { grid-column: 1 / 4; border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; display: grid; gap: 10px; }
+.detail h4 { margin: 0 0 4px; font: 600 12px var(--body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.why { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 13px; }
+.why span:nth-child(even) { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.spark { display: flex; gap: 4px; align-items: flex-end; height: 64px; }
+.spark div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--muted); height: 100%; justify-content: flex-end; }
+.spark i { display: block; width: 100%; background: var(--fg); opacity: .8; border-radius: 3px 3px 0 0; min-height: 2px; }
+.sched { display: flex; gap: 4px; overflow-x: auto; }
+.sched div { flex: 0 0 auto; text-align: center; border: 1px solid var(--line); border-radius: 7px; padding: 4px 7px; font-size: 11px; color: var(--muted); }
+.sched div.best { border-color: var(--good); color: var(--good); }
+.sched b { display: block; font: 600 16px var(--display); color: var(--fg); }
+.btn { border: 0; background: var(--accent); color: #fff; font-weight: 600; padding: 11px 14px; border-radius: 10px; width: 100%; }
+.btn.ghost { background: none; border: 1px solid var(--line); color: var(--fg); }
+.note { color: var(--muted); font-size: 12px; }
+
+.section-title { font: 600 13px var(--body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+.row { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+.row .c { color: var(--muted); font-size: 12px; grid-column: 1 / 3; }
+.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.summary div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.summary b { display: block; font: 700 26px/1.1 var(--display); }
+.summary span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+form.add { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+form.add input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+form.add .full { grid-column: 1 / 3; }
+textarea { width: 100%; min-height: 90px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px; font: 12px ui-monospace, monospace; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; z-index: 20; }
+.empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+@media (prefers-reduced-motion: no-preference) { .card { transition: opacity .2s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>TTFL <span>Coach</span></h1>
+      <div class="meta" id="meta">Chargement…</div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="t-soir" aria-selected="true" data-view="soir">Ce soir</button>
+      <button role="tab" id="t-picks" aria-selected="false" data-view="picks">Mes picks</button>
+      <button role="tab" id="t-abs" aria-selected="false" data-view="abs">Absents</button>
+    </nav>
+  </header>
+
+  <main id="v-soir">
+    <div class="games" id="games"></div>
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="Chercher un joueur" autocomplete="off">
+      <button class="chip" id="f-blocked" aria-pressed="true">Masquer bloqués</button>
+      <button class="chip" id="f-dtd" aria-pressed="false">Masquer incertains</button>
+    </div>
+    <div class="list" id="list"></div>
+  </main>
+
+  <main id="v-picks" hidden>
+    <div class="summary" id="sum"></div>
+    <div class="section-title">Ajouter un pick passé</div>
+    <form class="add" id="addform">
+      <input class="full" id="a-name" list="allplayers" placeholder="Joueur" required>
+      <datalist id="allplayers"></datalist>
+      <input type="date" id="a-date" required>
+      <input type="number" id="a-score" placeholder="Score TTFL (option.)" inputmode="numeric">
+      <button class="btn full" type="submit">Ajouter</button>
+    </form>
+    <div class="section-title">Historique</div>
+    <div class="list" id="picks"></div>
+    <div class="section-title">Sauvegarde</div>
+    <p class="note">Tes picks sont enregistrés sur cet appareil. Copie la sauvegarde de temps en temps et colle-la ici pour la restaurer, ou pour passer à un autre appareil.</p>
+    <div class="toolbar"><button class="chip" id="b-export">Copier la sauvegarde</button><button class="chip" id="b-import">Restaurer depuis le texte</button></div>
+    <textarea id="backup" placeholder="Colle ici une sauvegarde"></textarea>
+  </main>
+
+  <main id="v-abs" hidden>
+    <div class="section-title">Absents ou incertains ce soir</div>
+    <div class="list" id="outs"></div>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const COOLDOWN = 30;
+const KEY = "ttfl_picks_v1";
+let DATA = null, open = null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function loadPicks() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
+function savePicks(p) { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {} }
+let PICKS = loadPicks();
+
+const dayMs = 864e5;
+const d0 = s => new Date(s + "T12:00:00Z");
+const diffDays = (a, b) => Math.round((d0(a) - d0(b)) / dayMs);
+const addDays = (s, n) => new Date(d0(s).getTime() + n * dayMs).toISOString().slice(0, 10);
+const fmtDay = s => d0(s).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
+function blockInfo(id) {
+  const last = PICKS.filter(p => p.id === id && diffDays(DATA.date, p.date) < COOLDOWN && diffDays(DATA.date, p.date) >= 0)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  return last ? addDays(last.date, COOLDOWN) : null;
+}
+function tonightPick() { return PICKS.find(p => p.date === DATA.date); }
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
+
+function fillScores() {
+  // complète les scores réels à partir des 5 derniers matchs publiés
+  const byId = Object.fromEntries(DATA.players.map(p => [p.id, p]));
+  let changed = false;
+  for (const pk of PICKS) {
+    if (pk.score != null) continue;
+    const p = byId[pk.id]; if (!p) continue;
+    const g = p.last5.find(g => g.d === pk.date.slice(5));
+    if (g) { pk.score = g.s; changed = true; }
+  }
+  if (changed) savePicks(PICKS);
+}
+
+function bestFuture(p) {
+  const soon = (p.future || []).filter(f => diffDays(f.d, DATA.date) <= 10);
+  return soon.reduce((b, f) => (!b || f.p > b.p ? f : b), null);
+}
+
+function tagsFor(p, t) {
+  const tags = [];
+  if (p.status) tags.push(`<span class="tag ${p.status === "Out" ? "bad" : "warn"}">${esc(p.status === "Day-To-Day" ? "Incertain" : p.status)}</span>`);
+  if (t.miss?.length) tags.push(`<span class="tag good">Absents : ${esc(t.miss.slice(0, 3).join(", "))}${t.miss.length > 3 ? "…" : ""}</span>`);
+  if (t.opp_rank && t.opp_rank <= 6) tags.push(`<span class="tag good">Défense adverse ${t.opp_rank}e plus permissive</span>`);
+  if (t.opp_rank && t.opp_rank >= 25) tags.push(`<span class="tag bad">Défense adverse solide</span>`);
+  if (t.b2b) tags.push(`<span class="tag warn">Back-to-back</span>`);
+  if (t.spread != null && Math.abs(t.spread) >= 10) tags.push(`<span class="tag warn">Risque de match plié (${t.spread > 0 ? "+" : ""}${t.spread})</span>`);
+  if (t.total != null && t.total >= 235) tags.push(`<span class="tag good">Match à haut score (${t.total})</span>`);
+  const bf = bestFuture(p);
+  if (bf && bf.p >= t.proj + 3) tags.push(`<span class="tag acc">Mieux ${esc(fmtDay(bf.d))} vs ${esc(bf.o)} (${bf.p.toFixed(0)})</span>`);
+  return tags.join("");
+}
+
+function detailHtml(p, t) {
+  const max = Math.max(60, ...p.last5.map(g => g.s));
+  const bf = bestFuture(p);
+  const why = [
+    ["Niveau de base (saison pondérée)", p.base.toFixed(1)],
+    ["Ajustement du soir", (t.adj > 0 ? "+" : "") + t.adj.toFixed(1)],
+    ["Moyenne cette saison", p.avg != null ? `${p.avg} (${p.gp} m.)` : "–"],
+    ["Minutes (3 derniers)", t.min_l3 ?? "–"],
+    ["Repos", t.rest >= 5 ? "5 j et +" : t.rest + " j"],
+    ["Ligne bookmakers", t.spread != null ? `${t.spread > 0 ? "+" : ""}${t.spread} · total ${t.total}` : "–"],
+  ];
+  const block = blockInfo(p.id);
+  const mine = tonightPick();
+  return `<div class="detail">
+    ${p.comment ? `<div class="note">${esc(p.comment)}</div>` : ""}
+    <div><h4>Pourquoi ${t.proj.toFixed(0)}</h4><div class="why">${why.map(([a, b]) => `<span>${a}</span><span>${esc(b)}</span>`).join("")}</div></div>
+    <div><h4>5 derniers matchs</h4><div class="spark">${p.last5.map(g => `<div><span>${g.s}</span><i style="height:${Math.max(2, g.s / max * 44)}px"></i><span>${esc(g.o)}</span></div>`).join("") || '<span class="note">Pas de match récent</span>'}</div></div>
+    ${p.future?.length ? `<div><h4>Prochains matchs (projection)</h4><div class="sched">${p.future.slice(0, 8).map(f => `<div class="${bf && f.d === bf.d && f.p >= t.proj + 3 ? "best" : ""}">${esc(fmtDay(f.d))}<b>${f.p.toFixed(0)}</b>${f.h ? "vs" : "@"} ${esc(f.o)}</div>`).join("")}</div></div>` : ""}
+    ${block ? `<p class="note">Bloqué jusqu'au ${esc(fmtDay(block))}.</p>`
+      : mine && mine.id === p.id ? `<button class="btn ghost" data-unpick="${esc(p.id)}">Annuler mon pick du soir</button>`
+      : `<button class="btn" data-pick="${esc(p.id)}">${mine ? "Remplacer mon pick par " : "Je prends "}${esc(p.name.split(" ").slice(-1)[0])}</button>`}
+  </div>`;
+}
+
+function renderSoir() {
+  const q = $("#q").value.trim().toLowerCase();
+  const hideBlocked = $("#f-blocked").getAttribute("aria-pressed") === "true";
+  const hideDtd = $("#f-dtd").getAttribute("aria-pressed") === "true";
+  const mine = tonightPick();
+  let rows = DATA.players.filter(p => p.tonight).sort((a, b) => b.tonight.proj - a.tonight.proj);
+  rows.forEach((p, i) => p._rank = i + 1);
+  rows = rows.filter(p => (!q || p.name.toLowerCase().includes(q) || p.team.toLowerCase() === q)
+    && (!hideBlocked || q || !blockInfo(p.id) || (mine && mine.id === p.id))
+    && (!hideDtd || !p.status));
+  if (!q) rows = rows.slice(0, 40);
+  const lo = 0, hi = 80;
+  $("#list").innerHTML = rows.map(p => {
+    const t = p.tonight, blocked = blockInfo(p.id), isPick = mine && mine.id === p.id;
+    const pct = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100));
+    return `<article class="card ${blocked && !isPick ? "blocked" : ""} ${isPick ? "pick" : ""}" data-id="${esc(p.id)}" tabindex="0">
+      <div class="rank">${p._rank}</div>
+      <div class="who"><div class="name">${esc(p.name)}</div>
+        <div class="match">${esc(p.team)} ${t.home ? "vs" : "@"} ${esc(t.opp)} · ${esc(p.pos)}${isPick ? " · <b>mon pick</b>" : ""}${blocked && !isPick ? ` · bloqué → ${esc(fmtDay(blocked))}` : ""}</div></div>
+      <div class="score"><div class="proj num">${t.proj.toFixed(1)}</div><div class="range">${t.p10.toFixed(0)}–${t.p90.toFixed(0)}</div></div>
+      <div class="bar" aria-hidden="true"><i style="left:${pct(t.p10)}%;right:${100 - pct(t.p90)}%"></i><b style="left:calc(${pct(t.proj)}% - 1px)"></b></div>
+      <div class="tags">${tagsFor(p, t)}</div>
+      ${open === p.id ? detailHtml(p, t) : ""}
+    </article>`;
+  }).join("") || `<div class="empty">Aucun joueur ne correspond. ${DATA.games.length ? "" : "Pas de match NBA ce soir."}</div>`;
+}
+
+function renderGames() {
+  const tz = { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" };
+  $("#games").innerHTML = DATA.games.map(g => `<div class="game"><b>${esc(g.away)} @ ${esc(g.home)}</b><small>${new Date(g.start).toLocaleTimeString("fr-FR", tz)}${g.total ? " · " + g.total : ""}</small></div>`).join("");
+}
+
+function renderPicks() {
+  const sorted = [...PICKS].sort((a, b) => b.date.localeCompare(a.date));
+  const scored = sorted.filter(p => p.score != null);
+  const total = scored.reduce((s, p) => s + p.score, 0);
+  const projSum = scored.reduce((s, p) => s + (p.proj || 0), 0);
+  $("#sum").innerHTML = `<div><b class="num">${total}</b><span>Total</span></div>
+    <div><b class="num">${scored.length ? (total / scored.length).toFixed(1) : "–"}</b><span>Moyenne</span></div>
+    <div><b class="num">${sorted.length}</b><span>Picks</span></div>`;
+  $("#picks").innerHTML = sorted.map((p, i) => {
+    const unlock = addDays(p.date, COOLDOWN), active = diffDays(DATA.date, p.date) < COOLDOWN;
+    return `<div class="row"><div><b>${esc(p.name)}</b> <span class="note">${esc(fmtDay(p.date))}</span></div>
+      <div class="num" style="font-size:22px;font-weight:700">${p.score ?? "…"}</div>
+      <div class="c">${p.proj ? `Projeté ${p.proj.toFixed(0)} · ` : ""}${active ? `bloqué jusqu'au ${esc(fmtDay(unlock))}` : "disponible"} · <button class="chip" style="padding:2px 8px" data-del="${PICKS.indexOf(p)}">Supprimer</button></div></div>`;
+  }).join("") || `<div class="empty">Aucun pick enregistré. Ajoute tes picks des 30 derniers jours pour que l'outil sache qui est bloqué.</div>`;
+  const names = [...new Set([...DATA.players.map(p => p.name), ...DATA.out_tonight.map(p => p.name)])].sort();
+  $("#allplayers").innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
+}
+
+function renderOuts() {
+  $("#outs").innerHTML = DATA.out_tonight.map(o => `<div class="row"><div><b>${esc(o.name)}</b> <span class="note">${esc(o.team)} ${o.home ? "vs" : "@"} ${esc(o.opp)}</span></div>
+    <div class="num" style="font-size:20px">${isNaN(o.base) ? "–" : o.base}</div><div class="c">${esc(o.comment || "Absent")}</div></div>`).join("")
+    + DATA.players.filter(p => p.tonight && p.status).map(p => `<div class="row"><div><b>${esc(p.name)}</b> <span class="tag warn">Incertain</span></div>
+    <div class="num" style="font-size:20px">${p.tonight.proj.toFixed(0)}</div><div class="c">${esc(p.comment || "")}</div></div>`).join("")
+    || `<div class="empty">Aucun absent signalé.</div>`;
+}
+
+function pick(id) {
+  const p = DATA.players.find(p => p.id === id);
+  PICKS = PICKS.filter(x => x.date !== DATA.date);
+  PICKS.push({ date: DATA.date, id: p.id, name: p.name, team: p.team, proj: p.tonight.proj });
+  savePicks(PICKS); toast(`Pick enregistré : ${p.name}`); render();
+}
+
+function render() { renderSoir(); renderPicks(); renderOuts(); }
+
+document.addEventListener("click", e => {
+  const tab = e.target.closest("[data-view]");
+  if (tab) {
+    document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-selected", b === tab));
+    ["soir", "picks", "abs"].forEach(v => $("#v-" + v).hidden = v !== tab.dataset.view);
+    return;
+  }
+  if (e.target.matches("[data-pick]")) return pick(e.target.dataset.pick);
+  if (e.target.matches("[data-unpick]")) { PICKS = PICKS.filter(x => x.date !== DATA.date); savePicks(PICKS); toast("Pick annulé"); return render(); }
+  if (e.target.matches("[data-del]")) { PICKS.splice(+e.target.dataset.del, 1); savePicks(PICKS); toast("Pick supprimé"); return render(); }
+  if (e.target.matches(".chip[aria-pressed]")) { e.target.setAttribute("aria-pressed", e.target.getAttribute("aria-pressed") !== "true"); return renderSoir(); }
+  const card = e.target.closest(".card");
+  if (card && !e.target.closest(".detail")) { open = open === card.dataset.id ? null : card.dataset.id; renderSoir(); }
+});
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches(".card")) e.target.click(); });
+$("#q").addEventListener("input", renderSoir);
+$("#addform").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = $("#a-name").value.trim();
+  const p = DATA.players.find(p => p.name === name) || DATA.out_tonight.find(p => p.name === name);
+  if (!p) return toast("Joueur introuvable : choisis un nom dans la liste");
+  const sc = $("#a-score").value;
+  PICKS = PICKS.filter(x => x.date !== $("#a-date").value);
+  PICKS.push({ date: $("#a-date").value, id: p.id, name: p.name, team: p.team, score: sc === "" ? null : +sc });
+  savePicks(PICKS); fillScores(); e.target.reset(); toast("Pick ajouté"); render();
+});
+$("#b-export").addEventListener("click", () => {
+  const txt = JSON.stringify(PICKS);
+  $("#backup").value = txt;
+  navigator.clipboard?.writeText(txt).then(() => toast("Sauvegarde copiée"), () => { $("#backup").select(); toast("Sélectionne et copie le texte"); });
+});
+$("#b-import").addEventListener("click", () => {
+  try { const v = JSON.parse($("#backup").value); if (!Array.isArray(v)) throw 0; PICKS = v; savePicks(PICKS); fillScores(); render(); toast(`${v.length} picks restaurés`); }
+  catch { toast("Texte invalide : colle une sauvegarde copiée depuis l'outil"); }
+});
+
+fetch("data.json", { cache: "no-store" }).then(r => r.json()).then(d => {
+  DATA = d;
+  const upd = new Date(d.generated).toLocaleString("fr-FR", { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
+  $("#meta").innerHTML = `Nuit du ${esc(fmtDay(d.date))}<br>MAJ ${esc(upd)}`;
+  $("#a-date").value = addDays(d.date, -1);
+  fillScores(); renderGames(); render();
+}).catch(() => { $("#list").innerHTML = `<div class="empty">Impossible de charger les projections (data.json). Réessaie dans quelques minutes.</div>`; $("#meta").textContent = "Hors ligne"; });
+</script>
+</body>
+</html>
