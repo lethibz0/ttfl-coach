@@ -42,7 +42,11 @@ jobs:
           git config user.name "ttfl-bot"
           git config user.email "ttfl-bot@users.noreply.github.com"
           git add -A data/raw data/box.parquet data/games.parquet data/odds.parquet site/data.json
-          git diff --cached --quiet || git commit -m "Mise à jour des projections" && git push
+          if ! git diff --cached --quiet; then
+            git commit -m "Mise à jour des projections"
+            git pull --rebase -X theirs origin main
+            git push
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
