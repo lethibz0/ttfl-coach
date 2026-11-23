@@ -205,7 +205,8 @@ function bestFuture(p) {
 
 function tagsFor(p, t) {
   const tags = [];
-  if (p.status) tags.push(`<span class="tag ${p.status === "Out" ? "bad" : "warn"}">${esc(p.status === "Day-To-Day" ? "Incertain" : p.status)}</span>`);
+  if (t.p_play < 0.85) tags.push(`<span class="tag ${t.p_play < 0.5 ? "bad" : "warn"}">${Math.round(t.p_play * 100)} % de jouer</span>`);
+  if (t.stale) tags.push(`<span class="tag warn">Statut à vérifier : le commentaire parle d'un autre match</span>`);
   if (t.miss?.length) tags.push(`<span class="tag good">Absents : ${esc(t.miss.slice(0, 3).join(", "))}${t.miss.length > 3 ? "…" : ""}</span>`);
   if (t.opp_rank && t.opp_rank <= 6) tags.push(`<span class="tag good">Défense adverse ${t.opp_rank}e plus permissive</span>`);
   if (t.opp_rank && t.opp_rank >= 25) tags.push(`<span class="tag bad">Défense adverse solide</span>`);
@@ -221,6 +222,7 @@ function detailHtml(p, t) {
   const max = Math.max(60, ...p.last5.map(g => g.s));
   const bf = bestFuture(p);
   const why = [
+    ["Score espéré", `${t.proj.toFixed(1)} × ${Math.round(t.p_play * 100)} % = ${t.exp.toFixed(1)}`],
     ["Niveau de base (saison pondérée)", p.base.toFixed(1)],
     ["Ajustement du soir", (t.adj > 0 ? "+" : "") + t.adj.toFixed(1)],
     ["Moyenne cette saison", p.avg != null ? `${p.avg} (${p.gp} m.)` : "–"],
@@ -232,7 +234,7 @@ function detailHtml(p, t) {
   const mine = tonightPick();
   return `<div class="detail">
     ${p.comment ? `<div class="note">${esc(p.comment)}</div>` : ""}
-    <div><h4>Pourquoi ${t.proj.toFixed(0)}</h4><div class="why">${why.map(([a, b]) => `<span>${a}</span><span>${esc(b)}</span>`).join("")}</div></div>
+    <div><h4>Pourquoi ${t.exp.toFixed(0)}</h4><div class="why">${why.map(([a, b]) => `<span>${a}</span><span>${esc(b)}</span>`).join("")}</div></div>
     <div><h4>5 derniers matchs</h4><div class="spark">${p.last5.map(g => `<div><span>${g.s}</span><i style="height:${Math.max(2, g.s / max * 44)}px"></i><span>${esc(g.o)}</span></div>`).join("") || '<span class="note">Pas de match récent</span>'}</div></div>
     ${p.future?.length ? `<div><h4>Prochains matchs (projection)</h4><div class="sched">${p.future.slice(0, 8).map(f => `<div class="${bf && f.d === bf.d && f.p >= t.proj + 3 ? "best" : ""}">${esc(fmtDay(f.d))}<b>${f.p.toFixed(0)}</b>${f.h ? "vs" : "@"} ${esc(f.o)}</div>`).join("")}</div></div>` : ""}
     ${block ? `<p class="note">Bloqué jusqu'au ${esc(fmtDay(block))}.</p>`
@@ -246,11 +248,11 @@ function renderSoir() {
   const hideBlocked = $("#f-blocked").getAttribute("aria-pressed") === "true";
   const hideDtd = $("#f-dtd").getAttribute("aria-pressed") === "true";
   const mine = tonightPick();
-  let rows = DATA.players.filter(p => p.tonight).sort((a, b) => b.tonight.proj - a.tonight.proj);
+  let rows = DATA.players.filter(p => p.tonight).sort((a, b) => b.tonight.exp - a.tonight.exp);
   rows.forEach((p, i) => p._rank = i + 1);
   rows = rows.filter(p => (!q || p.name.toLowerCase().includes(q) || p.team.toLowerCase() === q)
     && (!hideBlocked || q || !blockInfo(p.id) || (mine && mine.id === p.id))
-    && (!hideDtd || !p.status));
+    && (!hideDtd || p.tonight.p_play >= 0.8));
   if (!q) rows = rows.slice(0, 40);
   const lo = 0, hi = 80;
   $("#list").innerHTML = rows.map(p => {
@@ -260,7 +262,7 @@ function renderSoir() {
       <div class="rank">${p._rank}</div>
       <div class="who"><div class="name">${esc(p.name)}</div>
         <div class="match">${esc(p.team)} ${t.home ? "vs" : "@"} ${esc(t.opp)} · ${esc(p.pos)}${isPick ? " · <b>mon pick</b>" : ""}${blocked && !isPick ? ` · bloqué → ${esc(fmtDay(blocked))}` : ""}</div></div>
-      <div class="score"><div class="proj num">${t.proj.toFixed(1)}</div><div class="range">${t.p10.toFixed(0)}–${t.p90.toFixed(0)}</div></div>
+      <div class="score"><div class="proj num">${t.exp.toFixed(1)}</div><div class="range">${t.p_play < 0.95 ? `si joue ${t.proj.toFixed(0)} · ` : ""}${t.p10.toFixed(0)}–${t.p90.toFixed(0)}</div></div>
       <div class="bar" aria-hidden="true"><i style="left:${pct(t.p10)}%;right:${100 - pct(t.p90)}%"></i><b style="left:calc(${pct(t.proj)}% - 1px)"></b></div>
       <div class="tags">${tagsFor(p, t)}</div>
       ${open === p.id ? detailHtml(p, t) : ""}
@@ -294,7 +296,7 @@ function renderPicks() {
 function renderOuts() {
   $("#outs").innerHTML = DATA.out_tonight.map(o => `<div class="row"><div><b>${esc(o.name)}</b> <span class="note">${esc(o.team)} ${o.home ? "vs" : "@"} ${esc(o.opp)}</span></div>
     <div class="num" style="font-size:20px">${isNaN(o.base) ? "–" : o.base}</div><div class="c">${esc(o.comment || "Absent")}</div></div>`).join("")
-    + DATA.players.filter(p => p.tonight && p.status).map(p => `<div class="row"><div><b>${esc(p.name)}</b> <span class="tag warn">Incertain</span></div>
+    + DATA.players.filter(p => p.tonight && p.status).sort((a, b) => b.tonight.proj - a.tonight.proj).map(p => `<div class="row"><div><b>${esc(p.name)}</b> <span class="tag warn">${Math.round(p.tonight.p_play * 100)} % de jouer</span></div>
     <div class="num" style="font-size:20px">${p.tonight.proj.toFixed(0)}</div><div class="c">${esc(p.comment || "")}</div></div>`).join("")
     || `<div class="empty">Aucun absent signalé.</div>`;
 }
@@ -302,7 +304,7 @@ function renderOuts() {
 function pick(id) {
   const p = DATA.players.find(p => p.id === id);
   PICKS = PICKS.filter(x => x.date !== DATA.date);
-  PICKS.push({ date: DATA.date, id: p.id, name: p.name, team: p.team, proj: p.tonight.proj });
+  PICKS.push({ date: DATA.date, id: p.id, name: p.name, team: p.team, proj: p.tonight.exp });
   savePicks(PICKS); toast(`Pick enregistré : ${p.name}`); render();
 }
 

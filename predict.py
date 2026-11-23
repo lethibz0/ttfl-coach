@@ -16,6 +16,7 @@ import pandas as pd
 import features as F
 import fetch
 import model as M
+import availability as A
 
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).parent
@@ -73,6 +74,7 @@ def main(today: dt.date, update=True):
     inj = fetch.injuries()
     inj_status = dict(zip(inj.player_id.astype(str), inj.status))
     inj_comment = dict(zip(inj.player_id.astype(str), inj.comment))
+    inj_date = dict(zip(inj.player_id.astype(str), inj.date))
 
     # --- lignes futures ---
     ros = rosters(box, games, today)
@@ -89,6 +91,14 @@ def main(today: dt.date, update=True):
     fut = pd.DataFrame(fut)
     df = F.build(box, all_games, future=fut)
     ms = pickle.load(open(M.MODELS, "rb"))
+
+    # --- probabilité de jouer ce soir ---
+    tonight_games = up[up.game_id.isin(tonight_ids)]
+    pan = A.panel(box, pd.concat([games, tonight_games[games.columns.intersection(tonight_games.columns)]]))
+    pan = pan[pan.game_id.isin(tonight_ids)]
+    pan["p_model"] = ms["avail"].predict_proba(pan[A.FEATS])[:, 1]
+    p_model = dict(zip(pan.player_id, pan.p_model))
+    last_start = games.groupby("home_id").start.max().combine(games.groupby("away_id").start.max(), max)
     f = M.predict(ms, df[df._future].copy())
     tn = team_names(all_games)
 
@@ -127,7 +137,11 @@ def main(today: dt.date, update=True):
         }
         if len(tonight_row):
             r = tonight_row.iloc[0]
+            pm = float(p_model.get(pid, 0.85))
+            ps, stale = A.status_prob(inj_status.get(str(pid)), inj_comment.get(str(pid)), today)
+            pp = A.combine(pm, ps)
             entry["tonight"] = {
+                "p_play": round(pp, 2), "exp": round(float(r.proj) * pp, 1), "stale": bool(stale),
                 "opp": tn.get(str(r.opp_id), "?"), "home": int(r.home),
                 "proj": round(float(r.proj), 1), "p10": round(float(r.p10), 1), "p90": round(float(r.p90), 1),
                 "adj": round(float(r.adj), 1), "b2b": int(r.b2b), "rest": int(r.rest),
@@ -166,11 +180,11 @@ def main(today: dt.date, update=True):
             "out_tonight": out_tonight, "injuries": out_players}
     SITE.mkdir(exist_ok=True)
     (SITE / "data.json").write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str))
-    top = sorted([p for p in players if "tonight" in p], key=lambda p: -p["tonight"]["proj"])[:12]
+    top = sorted([p for p in players if "tonight" in p], key=lambda p: -p["tonight"]["exp"])[:12]
     print(f"{len(games_tonight)} matchs ce soir, {sum('tonight' in p for p in players)} joueurs projetés")
     for p in top:
         t = p["tonight"]
-        print(f"  {p['name']:<26} {p['team']:>4} vs {t['opp']:<4} proj {t['proj']:5.1f}  [{t['p10']:.0f}-{t['p90']:.0f}]  adj {t['adj']:+.1f}  {p['status'] or ''}")
+        print(f"  {p['name']:<26} {p['team']:>4} vs {t['opp']:<4} espéré {t['exp']:5.1f} (proj {t['proj']:5.1f} x {t['p_play']:.0%})  [{t['p10']:.0f}-{t['p90']:.0f}]  adj {t['adj']:+.1f}  {p['status'] or ''}")
 
 
 if __name__ == "__main__":

@@ -127,5 +127,8 @@ if __name__ == "__main__":
     if "--no-backtest" not in sys.argv:
         backtest(df)
     ms = fit(df)  # modèle final sur tout l'historique
+    import availability as A
+    box, games = F.load(ROOT) if "--cached" in sys.argv else (box, games)
+    ms["avail"] = A.fit(A.panel(box, games))
     pickle.dump(ms, open(MODELS, "wb"))
     print("modèle final sauvegardé")

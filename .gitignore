@@ -4,3 +4,5 @@ data/features.parquet
 data/backfill.log
 data/strategy_log.csv
 data/models.pkl
+data/avail_panel.parquet
+data/injuries_hist.parquet
