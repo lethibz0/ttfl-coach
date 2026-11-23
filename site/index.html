@@ -106,6 +106,15 @@ form.add input { padding: 9px 10px; border: 1px solid var(--line); border-radius
 form.add .full { grid-column: 1 / 3; }
 textarea { width: 100%; min-height: 90px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px; font: 12px ui-monospace, monospace; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; z-index: 20; }
+.advice { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 4px; margin-bottom: 10px; }
+.advice b { font-size: 15px; }
+.advice.x2 { border-color: var(--accent); background: var(--accent-soft); }
+.plan-row { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; grid-template-columns: 74px 1fr auto; gap: 2px 10px; align-items: center; }
+.plan-row.today { border-color: var(--fg); }
+.plan-row.x2 { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.plan-row .day { font: 600 15px var(--display); text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.plan-row .exp { font: 700 24px var(--display); text-align: right; }
+.plan-row .sub { grid-column: 2 / 4; display: flex; gap: 4px; flex-wrap: wrap; }
 .import { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 12px; padding: 12px; display: grid; gap: 10px; margin-bottom: 10px; }
 .import .toolbar .btn { flex: 1; }
 .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
@@ -121,6 +130,7 @@ textarea { width: 100%; min-height: 90px; border: 1px solid var(--line); border-
     </div>
     <nav class="tabs" role="tablist">
       <button role="tab" id="t-soir" aria-selected="true" data-view="soir">Ce soir</button>
+      <button role="tab" id="t-sem" aria-selected="false" data-view="sem">Semaine</button>
       <button role="tab" id="t-picks" aria-selected="false" data-view="picks">Mes picks</button>
       <button role="tab" id="t-abs" aria-selected="false" data-view="abs">Absents</button>
     </nav>
@@ -137,7 +147,15 @@ textarea { width: 100%; min-height: 90px; border: 1px solid var(--line); border-
       <div><b id="import-title"></b><div class="note" id="import-detail"></div></div>
       <div class="toolbar" style="margin:0"><button class="btn" id="b-import-ok" type="button">Importer</button><button class="btn ghost" id="b-import-no" type="button">Ignorer</button></div>
     </div>
+    <div class="advice" id="tonightbox" hidden></div>
     <div class="list" id="list"></div>
+  </main>
+
+  <main id="v-sem" hidden>
+    <div class="advice" id="x2box"></div>
+    <div class="section-title">Plan conseillé sur 7 jours</div>
+    <div class="list" id="plan"></div>
+    <p class="note">Le plan choisit un joueur par soir pour maximiser le total espéré de la semaine. Il tient compte de tes joueurs bloqués (30 jours après un pick) et n'utilise chaque joueur qu'une fois. Les soirs à venir sont estimés sans le rapport de blessures du jour : le plan est recalculé à chaque mise à jour.</p>
   </main>
 
   <main id="v-picks" hidden>
@@ -185,11 +203,17 @@ const diffDays = (a, b) => Math.round((d0(a) - d0(b)) / dayMs);
 const addDays = (s, n) => new Date(d0(s).getTime() + n * dayMs).toISOString().slice(0, 10);
 const fmtDay = s => d0(s).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
-function blockInfo(id) {
-  const last = PICKS.filter(p => p.id === id && diffDays(DATA.date, p.date) < COOLDOWN && diffDays(DATA.date, p.date) >= 0)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
-  return last ? addDays(last.date, COOLDOWN) : null;
+// Règle TTFL : un joueur pické est indisponible les 30 jours suivants -> de nouveau disponible à J+31.
+function blockedUntil(id, date, ignoreDate) {
+  let u = null;
+  for (const p of PICKS) {
+    if (p.id !== id || p.date === ignoreDate) continue;
+    const d = diffDays(date, p.date);
+    if (d >= 0 && d <= COOLDOWN) { const x = addDays(p.date, COOLDOWN + 1); if (!u || x > u) u = x; }
+  }
+  return u;
 }
+function blockInfo(id) { return blockedUntil(id, DATA.date, DATA.date); }
 function tonightPick() { return PICKS.find(p => p.date === DATA.date); }
 
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 2200); }
@@ -258,7 +282,8 @@ function renderSoir() {
   const hideDtd = $("#f-dtd").getAttribute("aria-pressed") === "true";
   const mine = tonightPick();
   let rows = DATA.players.filter(p => p.tonight).sort((a, b) => b.tonight.exp - a.tonight.exp);
-  rows.forEach((p, i) => p._rank = i + 1);
+  let rk = 0;
+  rows.forEach(p => p._rank = blockInfo(p.id) ? "–" : ++rk);
   rows = rows.filter(p => (!q || p.name.toLowerCase().includes(q) || p.team.toLowerCase() === q)
     && (!hideBlocked || q || !blockInfo(p.id) || (mine && mine.id === p.id))
     && (!hideDtd || p.tonight.p_play >= 0.8));
@@ -293,10 +318,10 @@ function renderPicks() {
     <div><b class="num">${scored.length ? (total / scored.length).toFixed(1) : "–"}</b><span>Moyenne</span></div>
     <div><b class="num">${sorted.length}</b><span>Picks</span></div>`;
   $("#picks").innerHTML = sorted.map((p, i) => {
-    const unlock = addDays(p.date, COOLDOWN), active = diffDays(DATA.date, p.date) < COOLDOWN;
+    const unlock = addDays(p.date, COOLDOWN + 1), active = diffDays(DATA.date, p.date) <= COOLDOWN;
     return `<div class="row"><div><b>${esc(p.name)}</b> <span class="note">${esc(fmtDay(p.date))}</span></div>
-      <div class="num" style="font-size:22px;font-weight:700">${p.score ?? "…"}</div>
-      <div class="c">${p.proj ? `Projeté ${p.proj.toFixed(0)} · ` : ""}${active ? `bloqué jusqu'au ${esc(fmtDay(unlock))}` : "disponible"} · <button class="chip" style="padding:2px 8px" data-del="${PICKS.indexOf(p)}">Supprimer</button></div></div>`;
+      <div class="num" style="font-size:22px;font-weight:700">${p.score ?? "…"}${p.x2 ? ' <span class="tag acc">x2</span>' : ""}</div>
+      <div class="c">${p.proj ? `Projeté ${p.proj.toFixed(0)} · ` : ""}${active ? `bloqué jusqu'au ${esc(fmtDay(unlock))}` : "disponible"} · <button class="chip" style="padding:2px 8px" data-x2="${PICKS.indexOf(p)}">${p.x2 ? "Retirer x2" : "x2 utilisé"}</button> <button class="chip" style="padding:2px 8px" data-del="${PICKS.indexOf(p)}">Supprimer</button></div></div>`;
   }).join("") || `<div class="empty">Aucun pick enregistré. Ajoute tes picks des 30 derniers jours pour que l'outil sache qui est bloqué.</div>`;
   const names = [...new Set([...DATA.players.map(p => p.name), ...DATA.out_tonight.map(p => p.name)])].sort();
   $("#allplayers").innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
@@ -317,17 +342,144 @@ function pick(id) {
   savePicks(PICKS); toast(`Pick enregistré : ${p.name}`); render();
 }
 
-function render() { renderSoir(); renderPicks(); renderOuts(); }
+// ---------- Plan 7 jours (affectation optimale) ----------
+let PLAN = null;
+function hungarian(a) { // a : n x m (n <= m), minimise ; renvoie la colonne choisie pour chaque ligne
+  const n = a.length, m = a[0].length, INF = 1e18;
+  const u = Array(n + 1).fill(0), v = Array(m + 1).fill(0), p = Array(m + 1).fill(0), way = Array(m + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    p[0] = i; let j0 = 0; const minv = Array(m + 1).fill(INF), used = Array(m + 1).fill(false);
+    do {
+      used[j0] = true; const i0 = p[j0]; let delta = INF, j1 = 0;
+      for (let j = 1; j <= m; j++) if (!used[j]) {
+        const cur = a[i0 - 1][j - 1] - u[i0] - v[j];
+        if (cur < minv[j]) { minv[j] = cur; way[j] = j0; }
+        if (minv[j] < delta) { delta = minv[j]; j1 = j; }
+      }
+      for (let j = 0; j <= m; j++) if (used[j]) { u[p[j]] += delta; v[j] -= delta; } else minv[j] -= delta;
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do { const j1 = way[j0]; p[j0] = p[j1]; j0 = j1; } while (j0);
+  }
+  const ans = Array(n); for (let j = 1; j <= m; j++) if (p[j]) ans[p[j] - 1] = j - 1; return ans;
+}
+function nightValue(p, night) {
+  if (night === DATA.date) return p.tonight ? { proj: p.tonight.proj, pp: p.tonight.exp / p.tonight.proj, opp: p.tonight.opp, home: p.tonight.home } : null;
+  const f = (p.future || []).find(f => f.d === night); if (!f) return null;
+  const k = diffDays(night, DATA.date);
+  let pp = p.pf ?? 0.92;
+  if (p.status === "Out") pp = 0.5; else if (p.status && k <= 2) pp = Math.min(pp, p.tonight ? p.tonight.p_play : 0.55);
+  return { proj: f.p, pp, opp: f.o, home: f.h };
+}
+function makePlan() {
+  const nightSet = new Set([DATA.date]);
+  for (const p of DATA.players) for (const f of p.future || []) if (diffDays(f.d, DATA.date) < 7) nightSet.add(f.d);
+  const nights = [...nightSet].sort();
+  const mine = tonightPick();
+  const pool = new Map();
+  [...DATA.players].sort((a, b) => b.base - a.base).slice(0, 90).forEach(p => pool.set(p.id, p));
+  DATA.players.filter(p => p.tonight).sort((a, b) => b.tonight.exp - a.tonight.exp).slice(0, 40).forEach(p => pool.set(p.id, p));
+  let cands = [...pool.values()].filter(p => !mine || p.id !== mine.id);
+  const free = nights.filter(n => !(mine && n === DATA.date));
+  const V = free.map(n => cands.map(p => {
+    if (blockedUntil(p.id, n, mine ? null : DATA.date)) return null;
+    const v = nightValue(p, n); return v ? v : null;
+  }));
+  const cost = V.map(r => r.map(v => v ? -v.proj * v.pp : 0));
+  const rows = [];
+  if (cands.length >= free.length && free.length) {
+    const asg = hungarian(cost);
+    free.forEach((n, i) => { const j = asg[i], v = V[i][j]; if (v) rows.push({ night: n, p: cands[j], ...v, exp: v.proj * v.pp }); });
+  }
+  if (mine) {
+    const p = DATA.players.find(p => p.id === mine.id);
+    const v = p && nightValue(p, DATA.date);
+    rows.push({ night: DATA.date, p: p || { name: mine.name, team: mine.team, id: mine.id }, ...(v || { proj: mine.proj || 0, pp: 1 }), exp: v ? v.proj * v.pp : (mine.proj || 0), locked: true });
+  }
+  rows.sort((a, b) => a.night.localeCompare(b.night));
+  return { rows, x2: x2Advice(rows) };
+}
+
+// ---------- Bonus x2 : 1 par mois (novembre -> avril), perdu si non utilisé ou si le pick ne joue pas ----------
+const monthOf = d => d.slice(0, 7);
+function x2Used(month) { return PICKS.some(p => p.x2 && monthOf(p.date) === month); }
+function daysInMonth(d) { const [y, m] = d.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+function x2Advice(rows) {
+  const out = [];
+  for (const month of [...new Set(rows.map(r => monthOf(r.night)))]) {
+    const mo = +month.slice(5, 7);
+    if (mo > 4 && mo < 11) continue;
+    if (x2Used(month)) { out.push({ month, used: true }); continue; }
+    const inMonth = rows.filter(r => monthOf(r.night) === month);
+    const eligible = inMonth.filter(r => r.pp >= 0.85 && !(r.locked && diffDays(r.night, DATA.date) < 0));
+    if (!eligible.length) { out.push({ month, none: true }); continue; }
+    const best = eligible.reduce((a, b) => (b.exp > a.exp ? b : a));
+    const lastNight = inMonth[inMonth.length - 1].night;
+    const remaining = Math.round((daysInMonth(lastNight) - +lastNight.slice(8)) * 0.93); // soirs restants après le plan
+    // valeur attendue du meilleur soir parmi les soirs restants du mois (tirages dans la distribution des soirs planifiés)
+    const sample = rows.filter(r => r.night !== DATA.date).map(r => r.exp).sort((a, b) => a - b);
+    let threshold = 0;
+    if (remaining > 0 && sample.length) {
+      const n = sample.length;
+      sample.forEach((v, i) => { threshold += v * (((i + 1) / n) ** remaining - (i / n) ** remaining); });
+    }
+    out.push({ month, best, threshold, remaining, useNow: best.exp >= threshold });
+  }
+  return out;
+}
+const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+const monthName = m => MONTHS[+m.slice(5, 7) - 1];
+function x2Text(a) {
+  if (a.used) return `<div><b>x2 de ${monthName(a.month)} déjà utilisé</b><div class="note">Le prochain arrive le 1er du mois suivant.</div></div>`;
+  if (a.none) return `<div><b>x2 de ${monthName(a.month)} : rien d'assez sûr cette semaine</b><div class="note">Aucun pick planifié n'a au moins 85 % de chances de jouer.</div></div>`;
+  const when = a.best.night === DATA.date ? "ce soir" : fmtDay(a.best.night);
+  if (a.useNow) return `<div><b>x2 de ${monthName(a.month)} : ${esc(when)} sur ${esc(a.best.p.name)}</b><div class="note">${a.best.exp.toFixed(0)} pts espérés, soit ${(2 * a.best.exp).toFixed(0)} avec le x2. ${a.remaining > 0 ? `C'est mieux que ce qu'on peut attendre ${a.remaining > 1 ? `du meilleur des ${a.remaining} autres soirs` : "du dernier soir"} du mois (environ ${a.threshold.toFixed(0)}).` : "C'est la dernière occasion du mois."}</div></div>`;
+  return `<div><b>x2 de ${monthName(a.month)} : garde-le pour l'instant</b><div class="note">Le meilleur soir de la semaine (${esc(when)}, ${esc(a.best.p.name)}, ${a.best.exp.toFixed(0)} espérés) est en dessous de ce qu'on peut attendre ${a.remaining > 1 ? `du meilleur des ${a.remaining} soirs restants` : "du dernier soir"} du mois (environ ${a.threshold.toFixed(0)}). Vise un pick d'au moins ${a.threshold.toFixed(0)} espérés.</div></div>`;
+}
+function renderPlan() {
+  const rows = PLAN.rows;
+  const x2night = new Set(PLAN.x2.filter(a => a.useNow).map(a => a.best.night));
+  const tot = rows.reduce((s, r) => s + r.exp, 0);
+  $("#x2box").className = "advice" + (x2night.size ? " x2" : "");
+  $("#x2box").innerHTML = `<div class="note">Total espéré sur la semaine : <b class="num" style="font-size:18px">${tot.toFixed(0)}</b> pts</div>` + PLAN.x2.map(x2Text).join("");
+  $("#plan").innerHTML = rows.map(r => `<div class="plan-row ${r.night === DATA.date ? "today" : ""} ${x2night.has(r.night) ? "x2" : ""}">
+      <div class="day">${esc(r.night === DATA.date ? "Ce soir" : fmtDay(r.night))}</div>
+      <div class="who" style="min-width:0"><div class="name">${esc(r.p.name)}</div><div class="match">${esc(r.p.team || "")}${r.opp ? ` ${r.home ? "vs" : "@"} ${esc(r.opp)}` : ""}</div></div>
+      <div class="exp num">${r.exp.toFixed(1)}</div>
+      <div class="sub">${r.locked ? '<span class="tag">mon pick</span>' : ""}${x2night.has(r.night) ? '<span class="tag acc">x2 conseillé</span>' : ""}${r.pp < 0.85 ? `<span class="tag warn">${Math.round(r.pp * 100)} % de jouer</span>` : ""}<span class="tag">si joue ${r.proj.toFixed(0)}</span></div>
+    </div>`).join("") || `<div class="empty">Pas assez de matchs à venir pour construire un plan.</div>`;
+}
+function renderTonightAdvice() {
+  const box = $("#tonightbox");
+  const r = PLAN.rows.find(r => r.night === DATA.date);
+  if (!r || r.locked) { box.hidden = true; return; }
+  const top = DATA.players.filter(p => p.tonight && !blockInfo(p.id)).sort((a, b) => b.tonight.exp - a.tonight.exp)[0];
+  const x2 = PLAN.x2.find(a => a.useNow && a.best.night === DATA.date);
+  let html = `<div class="note">Pick conseillé ce soir (plan sur 7 jours)</div><b>${esc(r.p.name)} · ${r.exp.toFixed(1)} espérés</b>`;
+  if (top && top.id !== r.p.id) {
+    const later = PLAN.rows.find(x => x.p.id === top.id);
+    html += `<div class="note">${esc(top.name)} est le meilleur ce soir (${top.tonight.exp.toFixed(1)}), mais ${later ? `le plan le garde pour ${esc(fmtDay(later.night))} (${later.exp.toFixed(0)} espérés)` : "le plan préfère étaler tes meilleurs joueurs sur la semaine"}.</div>`;
+  }
+  if (x2) html += `<div><span class="tag acc">x2 conseillé ce soir</span></div>`;
+  box.className = "advice" + (x2 ? " x2" : ""); box.innerHTML = html; box.hidden = false;
+}
+
+function render() { PLAN = makePlan(); renderSoir(); renderTonightAdvice(); renderPlan(); renderPicks(); renderOuts(); }
 
 document.addEventListener("click", e => {
   const tab = e.target.closest("[data-view]");
   if (tab) {
     document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-selected", b === tab));
-    ["soir", "picks", "abs"].forEach(v => $("#v-" + v).hidden = v !== tab.dataset.view);
+    ["soir", "sem", "picks", "abs"].forEach(v => $("#v-" + v).hidden = v !== tab.dataset.view);
     return;
   }
   if (e.target.matches("[data-pick]")) return pick(e.target.dataset.pick);
   if (e.target.matches("[data-unpick]")) { PICKS = PICKS.filter(x => x.date !== DATA.date); savePicks(PICKS); toast("Pick annulé"); return render(); }
+  if (e.target.matches("[data-x2]")) {
+    const pk = PICKS[+e.target.dataset.x2];
+    if (!pk.x2 && x2Used(pk.date.slice(0, 7))) return toast("Un x2 est déjà marqué sur ce mois");
+    pk.x2 = !pk.x2; savePicks(PICKS); toast(pk.x2 ? "x2 marqué" : "x2 retiré"); return render();
+  }
   if (e.target.matches("[data-del]")) { PICKS.splice(+e.target.dataset.del, 1); savePicks(PICKS); toast("Pick supprimé"); return render(); }
   if (e.target.matches(".chip[aria-pressed]")) { e.target.setAttribute("aria-pressed", e.target.getAttribute("aria-pressed") !== "true"); return renderSoir(); }
   const card = e.target.closest(".card");
@@ -361,7 +513,7 @@ const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, 
 let pendingImport = null;
 $("#b-link").addEventListener("click", async () => {
   if (!PICKS.length) return toast("Aucun pick à transférer");
-  const compact = PICKS.map(p => [p.date, p.id, p.name, p.team || "", p.score ?? null, p.proj ?? null]);
+  const compact = PICKS.map(p => [p.date, p.id, p.name, p.team || "", p.score ?? null, p.proj ?? null, p.x2 ? 1 : 0]);
   const url = location.origin + location.pathname + "#import-" + b64e(JSON.stringify(compact));
   if (navigator.share) {
     try { await navigator.share({ title: "Mes picks TTFL", url }); return; } catch (e) { if (e.name === "AbortError") return; }
@@ -373,7 +525,7 @@ function checkImport() {
   if (!location.hash.startsWith("#import-")) return;
   try {
     const rows = JSON.parse(b64d(location.hash.slice(8)));
-    pendingImport = rows.map(([date, id, name, team, score, proj]) => ({ date, id, name, team, score, proj }));
+    pendingImport = rows.map(([date, id, name, team, score, proj, x2]) => ({ date, id, name, team, score, proj, ...(x2 ? { x2: true } : {}) }));
     const known = new Set(PICKS.map(p => p.date + p.id));
     const fresh = pendingImport.filter(p => !known.has(p.date + p.id)).length;
     $("#import-title").textContent = `Importer ${pendingImport.length} picks ?`;

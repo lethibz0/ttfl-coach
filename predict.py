@@ -140,6 +140,7 @@ def main(today: dt.date, update=True):
             pm = float(p_model.get(pid, 0.85))
             ps, stale = A.status_prob(inj_status.get(str(pid)), inj_comment.get(str(pid)), today)
             pp = A.combine(pm, ps)
+            entry["pf"] = round(A.combine(pm, None), 2)
             entry["tonight"] = {
                 "p_play": round(pp, 2), "exp": round(float(r.proj) * pp, 1), "stale": bool(stale),
                 "opp": tn.get(str(r.opp_id), "?"), "home": int(r.home),
